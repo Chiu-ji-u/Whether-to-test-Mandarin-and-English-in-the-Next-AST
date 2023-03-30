@@ -1,0 +1,500 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(data.table)
+library(tidyverse)
+library(rio)
+library(arsenal)
+library(scales)
+library(knitr)
+library(kableExtra)
+```
+## 國文
+### 國文總開課數分布(學分數)
+```{r}
+df = import("data/2_type/result_2/學校國文總開課數分布(學分數)_0902_pre.xlsx") %>%
+  filter(!is.na(sch_ep5)) %>% 
+  mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>% 
+  filter(!is.na(pub_scd1)) %>% 
+  summarise_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ round(mean(.x, na.rm = TRUE), 1)) 
+
+out_pub = df %>% 
+  group_by(pub_scd1) %>% 
+  summarise_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ round(mean(.x, na.rm = TRUE), 1)) %>%
+  filter(!is.na(pub_scd1))
+
+out_schtyp = df %>% 
+  group_by(sch_typ) %>% 
+  summarise_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ round(mean(.x, na.rm = TRUE), 1)) %>%
+  filter(!is.na(sch_typ))
+
+out_total_1 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, zh_know_sch_nb, zh_exp_sch_nb, zh_lit_sch_nb, zh_topic_sch_nb)
+```
+
+### 國文開課數量學校比率
+```{r}
+out = df %>% 
+  filter(!is.na(pub_scd1)) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. > 0, 1 ,0)) %>%
+  mutate(crs_nb = zh_know_sch_nb + zh_exp_sch_nb + zh_lit_sch_nb + zh_topic_sch_nb) %>%
+  count(crs_nb) %>%
+  mutate(p = percent(n / sum(n), 0.1))
+
+out_pub = df %>% 
+  group_by(pub_scd1) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. > 0, 1 ,0)) %>%
+  mutate(crs_nb = zh_know_sch_nb + zh_exp_sch_nb + zh_lit_sch_nb + zh_topic_sch_nb) %>%
+  count(crs_nb) %>%
+  mutate(p = percent(n / sum(n), 0.1)) %>%
+  filter(!is.na(pub_scd1))
+
+out_schtyp = df %>% 
+  group_by(sch_typ) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. > 0, 1 ,0)) %>%
+  mutate(crs_nb = zh_know_sch_nb + zh_exp_sch_nb + zh_lit_sch_nb + zh_topic_sch_nb) %>%
+  count(crs_nb) %>%
+  mutate(p = percent(n / sum(n), 0.1)) %>%
+  filter(!is.na(sch_typ)) 
+
+out_total_2 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, crs_nb, p) %>%
+  pivot_wider(names_from = crs_nb, values_from = p)
+```
+
+### 國文未開課數量學校比率
+```{r}
+out = df %>% 
+  filter(!is.na(pub_scd1)) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. == 0, 1, 0)) %>%
+  rename(zh_know_sch_no = zh_know_sch_nb,
+         zh_exp_sch_no = zh_exp_sch_nb,
+         zh_lit_sch_no = zh_lit_sch_nb,
+         zh_topic_sch_no = zh_topic_sch_nb) %>%
+  mutate(sch_n = 1) %>%
+  select(sch_n, zh_know_sch_no, zh_exp_sch_no, zh_lit_sch_no, zh_topic_sch_no) %>%
+  summarise_at(vars(sch_n:zh_topic_sch_no), 
+               ~ round(sum(.x, na.rm = TRUE), 1)) %>%
+  mutate(across(c(2: 5), .fns = ~ percent( . / sch_n, 0.1)))
+
+out_pub = df %>% 
+  filter(!is.na(pub_scd1)) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. == 0, 1, 0)) %>%
+  rename(zh_know_sch_no = zh_know_sch_nb,
+         zh_exp_sch_no = zh_exp_sch_nb,
+         zh_lit_sch_no = zh_lit_sch_nb,
+         zh_topic_sch_no = zh_topic_sch_nb) %>%
+  mutate(sch_n = 1) %>%
+  group_by(pub_scd1) %>%
+  select(pub_scd1, sch_n, zh_know_sch_no, zh_exp_sch_no, zh_lit_sch_no, zh_topic_sch_no) %>%
+  summarise_at(vars(sch_n:zh_topic_sch_no), 
+               ~ round(sum(.x, na.rm = TRUE), 1)) %>%
+  mutate(across(c(3: 6), .fns = ~ percent( . / sch_n, 0.1)))
+
+out_schtyp = df %>% 
+  filter(!is.na(pub_scd1)) %>%
+  filter(!is.na(sch_typ)) %>%
+  mutate_at(vars(zh_know_sch_nb:zh_topic_sch_nb), 
+               ~ if_else(. == 0, 1, 0)) %>%
+  rename(zh_know_sch_no = zh_know_sch_nb,
+         zh_exp_sch_no = zh_exp_sch_nb,
+         zh_lit_sch_no = zh_lit_sch_nb,
+         zh_topic_sch_no = zh_topic_sch_nb) %>%
+  mutate(sch_n = 1) %>%
+  group_by(sch_typ) %>%
+  select(sch_typ, sch_n, zh_know_sch_no, zh_exp_sch_no, zh_lit_sch_no, zh_topic_sch_no) %>%
+  summarise_at(vars(sch_n:zh_topic_sch_no), 
+               ~ round(sum(.x, na.rm = TRUE), 1)) %>%
+  mutate(across(c(3: 6), .fns = ~ percent( . / sch_n, 0.1)))
+
+out_total_3 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(-pub_scd1) %>%
+  select(sch_typ, everything())
+```
+
+#### 以學校為單位的國文實際開課狀況
+```{r}
+out_total = out_total_1 %>% 
+  full_join(out_total_2, by = "sch_typ") %>%
+  full_join(out_total_3, by = "sch_typ") %>%
+  unite(sch_typ, c("sch_typ", "sch_n"), sep = "(")
+
+names(out_total) = names(out_total) %>% 
+  str_replace_all("_sch_nb", "_sch_cr") %>%
+  str_replace_all("_sch_no", "_no") %>%
+  str_replace_all("zh_", "")
+
+out_total %>% 
+  kbl() %>% 
+  kable_styling(font_size = 12)
+```
+
+### 國文修過人數分布
+```{r}
+df = import("data/2_type/result_2/各校國文修過人數分布_0902_pre.xlsx") %>% filter(!is.na(sch_ep5)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>% 
+  filter(!is.na(pub_scd1)) %>% 
+  summarise_at(vars(stdnt_nb:zh_topic_enroll_sch), 
+               ~ round(sum(.x, na.rm = TRUE), 1)
+               ) %>%
+  mutate(across(c(2: 5), .fns = ~ percent( . / stdnt_nb, 0.1)))
+
+out_schtyp = df %>% 
+  group_by(sch_typ) %>% 
+  filter(!is.na(sch_typ)) %>%  
+  summarise_at(vars(stdnt_nb:zh_topic_enroll_sch), 
+               ~ round(sum(.x, na.rm = TRUE), 1)
+               ) %>%
+  mutate(across(c(3: 6), .fns = ~ percent( . / stdnt_nb, 0.1)))
+
+out_pub = df %>% 
+  group_by(pub_scd1) %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb:zh_topic_enroll_sch), 
+               ~ round(sum(.x, na.rm = TRUE), 1)
+               ) %>%
+  mutate(across(c(3: 6), .fns = ~ percent( . / stdnt_nb, 0.1)))
+
+out_total_1 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(-pub_scd1) %>%
+  select(sch_typ, everything())
+```
+
+### 至少修超過四學分國文加深加廣的各校學生人數及占比
+```{r}
+df = import("data/2_type/result_2/至少修超過四學分國文加深加廣的各校學生人數及占比_0902_pre.xlsx")  %>% filter(!is.na(sch_ep5)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>% 
+  filter(!is.na(pub_scd1)) %>% 
+  summarise_at(vars(stdnt_nb: pass_sch), 
+               ~ sum(.x, na.rm = TRUE)
+               ) %>%
+  mutate(pass_p = percent(pass_sch / stdnt_nb, 0.1))
+
+out_pub = df %>% 
+  group_by(pub_scd1) %>% 
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: pass_sch), 
+               ~ sum(.x, na.rm = TRUE)
+               ) %>%
+  mutate(pass_p = percent(pass_sch / stdnt_nb, 0.1))
+
+out_schtyp = df %>% 
+  group_by(sch_typ) %>% 
+  filter(!is.na(sch_typ)) %>%
+  summarise_at(vars(stdnt_nb: pass_sch), 
+               ~ sum(.x, na.rm = TRUE)
+               ) %>%
+  mutate(pass_p = percent(pass_sch / stdnt_nb, 0.1))
+
+out_total_2 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, stdnt_nb, pass_p)
+```
+
+### 國文加深加廣各校學生平均修課學分數
+```{r}
+df = import("data/2_type/result_2/國文加深加廣各校學生平均修課學分數_0902_pre.xlsx") %>% filter(!is.na(sch_ep5)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  mutate(zh_elect_cr_stdnt_total = zh_elect_cr_avg_sch * stdnt_nb) %>%
+  summarise_at(vars(zh_elect_cr_stdnt_total),
+    ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1)) 
+
+out_pub = df %>%
+  group_by(pub_scd1) %>%
+  filter(!is.na(pub_scd1)) %>%
+  mutate(zh_elect_cr_stdnt_total = zh_elect_cr_avg_sch * stdnt_nb) %>%
+  summarise_at(vars(zh_elect_cr_stdnt_total),
+    ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1)) 
+
+out_schtyp = df %>%
+  group_by(sch_typ) %>%
+  filter(!is.na(sch_typ)) %>%
+  mutate(zh_elect_cr_stdnt_total = zh_elect_cr_avg_sch * stdnt_nb) %>%
+  summarise_at(vars(zh_elect_cr_stdnt_total),
+    ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1))
+
+out_total_3 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, zh_elect_cr_stdnt_total)
+```
+
+#### 以學生為單位的國文修課狀況
+```{r}
+out_total = out_total_1 %>% 
+  full_join(out_total_2, by = c("sch_typ", "stdnt_nb")) %>%
+  full_join(out_total_3, by = "sch_typ")
+
+names(out_total) = names(out_total) %>% 
+  str_replace_all("_sch|_elect|_total", "") %>%
+  str_replace_all("zh_", "")
+
+out_total
+```
+
+## 英文
+### 英文加深加廣各校開課組合
+```{r}
+df = import("data/2_type/result_2/engs_sch_0902_pre.xlsx") %>% filter(!is.na(sch_ep5) & !is.na(pub_scd1)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ)) 
+```
+
+```{r}
+out = df %>%
+  mutate(eng_adv_elect = eng_listen_sch + eng_reading_sch + eng_essay_sch,
+         snd_for_lang_sch_lv = case_when(
+           snd_for_lang_sch == 0 ~ "0",
+           snd_for_lang_sch >= 1 & snd_for_lang_sch <= 2 ~ "1~2",
+           snd_for_lang_sch >= 3 & snd_for_lang_sch <= 4 ~ "3~4",
+           snd_for_lang_sch >= 6 ~ "6~")) %>%
+  group_by(snd_for_lang_sch_lv) %>%
+  summarize(eng_adv_elect_mean = round(mean(eng_adv_elect), 1), n = n()) %>%
+  mutate(p = percent(n / sum(n), 0.1))
+#summarise_at(vars(eng_adv_elect), ~ mean(.x, na.rm = TRUE)) 
+#mutate(across(c(3: 7), .fns = ~ round( . / stdnt_nb, 3)))
+
+out_pub = df %>%
+  mutate(eng_adv_elect = eng_listen_sch + eng_reading_sch + eng_essay_sch,
+         snd_for_lang_sch_lv = case_when(
+           snd_for_lang_sch == 0 ~ "0",
+           snd_for_lang_sch >= 1 & snd_for_lang_sch <= 2 ~ "1~2",
+           snd_for_lang_sch >= 3 & snd_for_lang_sch <= 4 ~ "3~4",
+           snd_for_lang_sch >= 6 ~ "6~")) %>%
+  group_by(snd_for_lang_sch_lv, pub_scd1) %>%
+  summarize(eng_adv_elect_mean = round(mean(eng_adv_elect), 1), n = n()) %>%
+  ungroup() %>%
+  group_by(pub_scd1) %>%
+  mutate(p = percent(n / sum(n), 0.1)) %>%
+  filter(!is.na(pub_scd1)) %>%
+  arrange(pub_scd1)
+
+out_schtyp = df %>%
+  mutate(eng_adv_elect = eng_listen_sch + eng_reading_sch + eng_essay_sch,
+         snd_for_lang_sch_lv = case_when(
+           snd_for_lang_sch == 0 ~ "0",
+           snd_for_lang_sch >= 1 & snd_for_lang_sch <= 2 ~ "1~2",
+           snd_for_lang_sch >= 3 & snd_for_lang_sch <= 4 ~ "3~4",
+           snd_for_lang_sch >= 6 ~ "6~")) %>%
+  group_by(snd_for_lang_sch_lv, sch_typ) %>%
+  summarize(eng_adv_elect_mean = round(mean(eng_adv_elect), 1), n = n()) %>%
+  ungroup() %>%
+  group_by(sch_typ) %>%
+  mutate(p = percent(n / sum(n), 0.1)) %>%
+  filter(!is.na(sch_typ)) %>%
+  arrange(sch_typ)
+```
+
+#### 以學校為單位英文實際開課狀況
+```{r}
+out_total = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(-c(n, pub_scd1)) %>%
+  select(sch_typ, everything()) %>%
+  pivot_wider(names_from = snd_for_lang_sch_lv, values_from = c(eng_adv_elect_mean, p))
+
+names(out_total) = names(out_total) %>% 
+  str_replace_all("_elect_mean", "")
+
+out_total
+```
+
+### 英文和第二外語學生平均修課學分
+```{r}
+df = import("data/2_type/result_2/完整修滿英文加深加廣比例的各校學生人數及占比_0902_pre.xlsx") %>% filter(!is.na(sch_ep5)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  mutate(eng_adv_elect_cr_stdnt_total = eng_adv_elect_cr_stdnt_avg * stdnt_nb,
+         snd_for_lang_cr_stdnt_total = snd_for_lang_cr_stdnt_avg * stdnt_nb) %>%
+  summarise_at(vars(eng_adv_elect_cr_stdnt_total, snd_for_lang_cr_stdnt_total),
+               ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1)) 
+
+out_pub = df %>%
+  group_by(pub_scd1) %>%
+  filter(!is.na(pub_scd1)) %>%
+  mutate(eng_adv_elect_cr_stdnt_total = eng_adv_elect_cr_stdnt_avg * stdnt_nb,
+         snd_for_lang_cr_stdnt_total = snd_for_lang_cr_stdnt_avg * stdnt_nb) %>%
+  summarise_at(vars(eng_adv_elect_cr_stdnt_total, snd_for_lang_cr_stdnt_total),
+               ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1)) 
+
+out_schtyp = df %>%
+  group_by(sch_typ) %>%
+  filter(!is.na(sch_typ)) %>%
+  mutate(eng_adv_elect_cr_stdnt_total = eng_adv_elect_cr_stdnt_avg * stdnt_nb,
+         snd_for_lang_cr_stdnt_total = snd_for_lang_cr_stdnt_avg * stdnt_nb) %>%
+  summarise_at(vars(eng_adv_elect_cr_stdnt_total, snd_for_lang_cr_stdnt_total),
+               ~ round(sum(.x, na.rm = TRUE)/ sum(stdnt_nb), 1))
+
+out_total_1 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(-pub_scd1) %>%
+  select(sch_typ, everything())
+```
+
+### 學生完整修課比例
+```{r}
+out = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: full_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(full_p = percent(full_sch / stdnt_nb, 0.1))
+
+out_pub = df %>%
+  group_by(pub_scd1) %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: full_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(full_p = percent(full_sch / stdnt_nb, 0.1))
+
+out_schtyp = df %>%
+  group_by(sch_typ) %>%
+  filter(!is.na(sch_typ)) %>%
+  summarise_at(vars(stdnt_nb: full_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(full_p = percent(full_sch / stdnt_nb, 0.1))
+
+out_total_2 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, full_p)
+```
+
+### 學生選修第二外語比例
+```{r}
+df = import("data/2_type/result_2/加深加廣修過二外各校學生人數_0902_pre.xlsx") %>% filter(!is.na(sch_ep5)) %>% mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: snd_for_lang_enroll_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(snd_p = percent(snd_for_lang_enroll_sch / stdnt_nb, 0.1))
+
+out_schtyp = df %>%
+  filter(!is.na(sch_typ)) %>%
+  group_by(sch_typ) %>%
+  summarise_at(vars(stdnt_nb: snd_for_lang_enroll_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(snd_p = percent(snd_for_lang_enroll_sch / stdnt_nb, 0.1))
+
+out_pub = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  group_by(pub_scd1) %>%
+  summarise_at(vars(stdnt_nb: snd_for_lang_enroll_sch), ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(snd_p = percent(snd_for_lang_enroll_sch / stdnt_nb, 0.1))
+
+out_total_3 = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1,
+                          !is.na(sch_typ) ~ sch_typ,
+                          is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(sch_typ, snd_p)
+```
+
+#### 以學生為單位英文修課狀況
+```{r}
+out_total = out_total_1 %>%
+  full_join(out_total_2) %>%
+  full_join(out_total_3)
+
+names(out_total) = names(out_total) %>%
+  str_replace_all("_elect|_total", "")
+
+out_total %>%
+  kbl() %>%
+  kable_styling(full_width = F)
+```
+
+### 英文加深加廣學生修課組合比例
+```{r}
+df = import("data/2_type/result_2/英文加深加廣組合各校學生人數及占比_0902_pre.xlsx") %>%
+  filter(!is.na(sch_ep5)) %>% 
+  mutate(sch_typ = if_else(sch_typ %in% c("偏遠", "極偏", "特偏"), "偏遠", sch_typ))
+```
+
+```{r}
+out = df %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: two_eng_four_s_sch), 
+               ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(across(c(2: 6), .fns = ~ . / stdnt_nb)) %>%
+  mutate(none = 1 - not_pass_sch - six_eng_sch - four_eng_two_s_sch - two_eng_four_s_sch - too_much_sch) %>%
+  mutate(across(c(2: 7), .fns = ~ percent(., 0.1))) %>%
+  select(stdnt_nb, not_pass_sch, six_eng_sch, four_eng_two_s_sch, two_eng_four_s_sch, too_much_sch, none)
+
+out_pub = df %>%
+  group_by(pub_scd1) %>%
+  filter(!is.na(pub_scd1)) %>%
+  summarise_at(vars(stdnt_nb: two_eng_four_s_sch), 
+               ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(across(c(3: 7), .fns = ~ . / stdnt_nb)) %>%
+  mutate(none = 1 - not_pass_sch - six_eng_sch - four_eng_two_s_sch - two_eng_four_s_sch - too_much_sch) %>%
+  mutate(across(c(3: 8), .fns = ~ percent(., 0.1))) %>%
+  select(pub_scd1, stdnt_nb, not_pass_sch, six_eng_sch, four_eng_two_s_sch, two_eng_four_s_sch, too_much_sch, none)
+
+out_schtyp = df %>%
+  group_by(sch_typ) %>%
+  filter(!is.na(sch_typ)) %>%
+  summarise_at(vars(stdnt_nb: two_eng_four_s_sch), 
+               ~ sum(.x, na.rm = TRUE)) %>%
+  mutate(across(c(3: 7), .fns = ~ . / stdnt_nb)) %>%
+  mutate(none = 1 - not_pass_sch - six_eng_sch - four_eng_two_s_sch - two_eng_four_s_sch - too_much_sch) %>%
+  mutate(across(c(3: 8), .fns = ~ percent(., 0.1))) %>%
+  select(sch_typ, stdnt_nb, not_pass_sch, six_eng_sch, four_eng_two_s_sch, two_eng_four_s_sch, too_much_sch, none)
+
+out_total = out %>% bind_rows(out_pub, out_schtyp) %>%
+  mutate(sch_typ = case_when(!is.na(pub_scd1) ~ pub_scd1, 
+                             !is.na(sch_typ) ~ sch_typ, 
+                             is.na(pub_scd1) & is.na(sch_typ) ~ "整體")) %>%
+  select(-pub_scd1) %>%
+  select(sch_typ, everything())
+
+names(out_total) = names(out_total) %>%
+  str_replace_all("_sch", "")
+
+out_total %>%
+  kbl() %>%
+  kable_styling(full_width = F)
+```
